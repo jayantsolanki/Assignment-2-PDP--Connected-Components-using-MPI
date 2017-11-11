@@ -1,8 +1,7 @@
-/*  Jayant
- *  Solanki
- *  jayantso
+/*  YOUR_FIRST_NAME: Jayant
+ *  YOUR_LAST_NAME:	Solanki
+ *  YOUR_UBIT_NAME: jayantso
  */
-
 #ifndef A1_HPP
 #define A1_HPP
 
@@ -33,6 +32,7 @@ int connected_components(std::vector<signed char>& A, int n, int q, const char* 
     int b = n / q;
     int max = 0;
     int iteration_limit = 300;
+    int tree_hanging = 1;//flag for implementing tree hanging part, set to 0 for otherwise
     int count =0;
     int success_checker = 0;//check if the block level P is same or not then only break the loop, it should be equal to processor count
     // printf("size is %d \n",size);
@@ -177,82 +177,86 @@ int connected_components(std::vector<signed char>& A, int n, int q, const char* 
 	    		PPrime[i * b + j] = PPrime[i*b];
 	    	}
 	    }
-	    MPI_Comm_free(&row_comm);
-	    //////////////////////////////////////////////////Now the tree hanging part///////////////////////////////////////////
-		M = Dummy;//reinitialising helper matrix to zeros
-		for (int i = 0; i<b; i++)
-	    {
-	    	for (int j = 0; j<b; j++)
-	    	{
-	    		if (P[i * b + j] == i+row*b){//adding row*b, for adjusting the actual row number
-	    			M[i * b + j] = PPrime[i * b + j];//assigning the respective max vertex
-	     		}
-	    	}
-	    }
-	    Mtemp = M;//Setting Mtemp as M for finding the local All reduce along row wise
-	    //now applying global allreduce row-wise on M
-	    //first finding the max vertex at block level
-	    Mtemp=M;
-	    for (int i = 0; i<b; i++)
-	    {
-	    	for (int j = 0; j<b; j++)
-	    	{
-	    		if(Mtemp[i * b]<=Mtemp[i * b + j]){//storing the block level rowwise max vertex at the start of the row
-					Mtemp[i * b] = Mtemp[i * b + j];
-				}
-	    	}
-	    }
-	    MPI_Comm_split(comm, (rank/q), rank, &row_comm);
-	    // MPI_Comm_rank(row_comm, &row_rank);
-	    // MPI_Comm_size(row_comm, &row_size);
-	    // printf("WORLD RANK/SIZE: %d/%d \t ROW RANK/SIZE: %d/%d\n",rank, size, row_rank, row_size);
-	    Q = Dummy;//resetting Matrix Q for storing the ALLreduce from M
-	    for (int j = 0; j<b; j++)
-		{	
-			max = Mtemp[j*b];
-			// printf("max %d", max);
-			MPI_Allreduce(&max, &Q[j*b], 1, MPI_INT, MPI_MAX, row_comm);//storing resultant value in matrix Q
-		}
-		for (int i = 0; i<b; i++)//replicating Q along row-wise
-	    {
-	    	for (int j = 0; j<b; j++)
-	    	{
-	    		Q[i * b + j] = Q[i*b];
-	    	}
-	    }
-	    MPI_Comm_free(&row_comm);
-	    //Final Step
-	    //Giving P some hope in attaining convergence
-	    Ptemp = P; //storing past value of P
-	    for (int i = 0; i<b; i++)//
-	    {
-	    	for (int j = 0; j<b; j++)
-	    	{
-	    		if(Q[i * b + j] >= PPrime[i * b + j])//taking max value
-	    			P[i * b + j] = Q[i*b];
-	    		else
-	    			P[i * b + j] = PPrime[i*b];
-	    	}
-	    }
-	    // checking for any change in matrix
-	    // Printing the Parent Matrix
-	    
-	    if (P == Ptemp){
-	  		// printf("Success");
-	  		success_checker++;
-	  		if(success_checker==size){
-	  			// printf("Success");
-	  			break;
-	  		}
-	    }
-	  	// else
-	  		// printf("Repeat again");
-	  	count++;//update loop count
-	  	if(count == 300)//the loopbreaker
-	  		break;
-	}//end of while loop
+	    if(tree_hanging==1){
+
+		    MPI_Comm_free(&row_comm);
+		    //////////////////////////////////////////////////Now the tree hanging part///////////////////////////////////////////
+			M = Dummy;//reinitialising helper matrix to zeros
+			for (int i = 0; i<b; i++)
+		    {
+		    	for (int j = 0; j<b; j++)
+		    	{
+		    		if (P[i * b + j] == i+row*b){//adding row*b, for adjusting the actual row number
+		    			M[i * b + j] = PPrime[i * b + j];//assigning the respective max vertex
+		     		}
+		    	}
+		    }
+		    Mtemp = M;//Setting Mtemp as M for finding the local All reduce along row wise
+		    //now applying global allreduce row-wise on M
+		    //first finding the max vertex at block level
+		    Mtemp=M;
+		    for (int i = 0; i<b; i++)
+		    {
+		    	for (int j = 0; j<b; j++)
+		    	{
+		    		if(Mtemp[i * b]<=Mtemp[i * b + j]){//storing the block level rowwise max vertex at the start of the row
+						Mtemp[i * b] = Mtemp[i * b + j];
+					}
+		    	}
+		    }
+		    MPI_Comm_split(comm, (rank/q), rank, &row_comm);
+		    // MPI_Comm_rank(row_comm, &row_rank);
+		    // MPI_Comm_size(row_comm, &row_size);
+		    // printf("WORLD RANK/SIZE: %d/%d \t ROW RANK/SIZE: %d/%d\n",rank, size, row_rank, row_size);
+		    Q = Dummy;//resetting Matrix Q for storing the ALLreduce from M
+		    for (int j = 0; j<b; j++)
+			{	
+				max = Mtemp[j*b];
+				// printf("max %d", max);
+				MPI_Allreduce(&max, &Q[j*b], 1, MPI_INT, MPI_MAX, row_comm);//storing resultant value in matrix Q
+			}
+			for (int i = 0; i<b; i++)//replicating Q along row-wise
+		    {
+		    	for (int j = 0; j<b; j++)
+		    	{
+		    		Q[i * b + j] = Q[i*b];
+		    	}
+		    }
+		    MPI_Comm_free(&row_comm);
+		    //Final Step
+		    //Giving P some hope in attaining convergence
+		    Ptemp = P; //storing past value of P
+		    for (int i = 0; i<b; i++)//
+		    {
+		    	for (int j = 0; j<b; j++)
+		    	{
+		    		if(Q[i * b + j] >= PPrime[i * b + j])//taking max value
+		    			P[i * b + j] = Q[i*b];
+		    		else
+		    			P[i * b + j] = PPrime[i*b];
+		    	}
+		    }
+		    // checking for any change in matrix	    
+		    if (P == Ptemp){
+		  		// printf("Success");
+		  		success_checker++;
+		  		if(success_checker==size){
+		  			// printf("Success");
+		  			break;
+		  		}
+		    }
+		  	// else
+		  		// printf("Repeat again");
+		  	count++;//update loop count
+		  	if(count == 300)//the loopbreaker
+		  		break;
+		  }//tree hanging , see tree_hanging==0 to not implement tree hanging
+		  else 
+		  	break;
+	}//end of while loop, 
 		sleep(rank);
 	    // printf("Col %d",col*b);
+	    // Printing the Parent Matrix
 	    std::cout << "Parent Matrix P (" << row << "," << col << ")" << std::endl;
 	    for (int i = 0; i < b; ++i) {
 	        for (int j = 0; j < b; ++j) std::cout << static_cast<int>(P[i * b + j]) << " ";

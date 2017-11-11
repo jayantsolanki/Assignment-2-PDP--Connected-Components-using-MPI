@@ -1,0 +1,1 @@
+I have used the loop for tree hanging iterations. Parent P is displayed at the end after the tree hanging part. To display the Parent P and PPrime replace the matrix name with P or PPrime. To disable tree hanging part set variable tree_hanging = 0;
