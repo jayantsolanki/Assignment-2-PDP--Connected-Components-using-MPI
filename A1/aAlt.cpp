@@ -176,6 +176,6 @@ int main(int argc, char* argv[]) {
     }
 
     MPI_Comm_free(&new_world);
-
+    
     return MPI_Finalize();
 } // main
