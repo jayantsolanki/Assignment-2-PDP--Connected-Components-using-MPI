@@ -5,7 +5,7 @@ all: a1
 
 demo:
 	$(CXX) -DDEBUG $(CXXFLAGS) a1.cpp -o a1
-	mpiexec -np 8 ./a1 8 6 out
+	mpiexec -np 8 ./a1 8 20 out
 
 clean:
 	rm -rf a1
