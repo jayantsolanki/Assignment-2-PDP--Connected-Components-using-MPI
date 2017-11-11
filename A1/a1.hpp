@@ -20,9 +20,11 @@ int connected_components(std::vector<signed char>& A, int n, int q, const char* 
     int col = rank % q;
     int row = rank / q;
     std::vector<signed char> Ptemp; //declaring temporary parent sub-matrix
-    std::vector<signed char> M; //declaring temp sub-matrix
+    std::vector<signed char> M; //declaring temp sub-matrix, helper matrix
+    std::vector<signed char> Mtemp; //declaring temp sub-matrix
     std::vector<signed char> Q; //declaring temp sub-matrix
     std::vector<signed char> P; //declaring parent sub-matrix
+    std::vector<signed char> PPrime; //declaring parent sub-matrix
     int b = n / q;
     int max = 0;
     // printf("size is %d \n",size);
@@ -31,7 +33,8 @@ int connected_components(std::vector<signed char>& A, int n, int q, const char* 
     P.resize(b * b, 0);
     Q.resize(b * b, 0);
     M.resize(b * b, 0);
-    sleep(rank);
+    Mtemp.resize(b * b, 0);
+    PPrime.resize(b * b, 0);
     // sequential processing here for each processor
     for (int i = 0; i<b; i++)
     {
@@ -39,7 +42,7 @@ int connected_components(std::vector<signed char>& A, int n, int q, const char* 
     	{
     		if (A[i * b + j] == 1){
     			Ptemp[i * b + j] = row*b+i;//assigning the highest row-wise vertex
-    			if(Ptemp[0 + j]<=Ptemp[i * b + j]){
+    			if(Ptemp[0 + j]<=Ptemp[i * b + j]){//storing the local columnwise vertex at the start of the column
     				Ptemp[0 + j] = Ptemp[i * b + j];
     			}
      		}
@@ -72,7 +75,7 @@ int connected_components(std::vector<signed char>& A, int n, int q, const char* 
     		MPI_Allreduce(&max, &P[j], 1, MPI_INT, MPI_MAX, col_comm);
     	}
     MPI_Comm_free(&col_comm);
-    for (int i = 0; i<b; i++)//replicating globally found max vertex in each process
+    for (int i = 0; i<b; i++)//replicating globally found max vertex in each process, along column
     {
     	for (int j = 0; j<b; j++)
     	{
@@ -80,15 +83,28 @@ int connected_components(std::vector<signed char>& A, int n, int q, const char* 
     	}
     }
 
-    for (int i = 0; i<b; i++)
+    for (int i = 0; i<b; i++)//creating the helper matrix
     {
     	for (int j = 0; j<b; j++)
     	{
     		if (A[i * b + j] == 1){
-    			M[i * b + j] = P[i * b + j];//assigning the respeective max vertex
+    			M[i * b + j] = P[i * b + j];//assigning the respective max vertex
      		}
     	}
     }
+    //now applying global allreduce row-wise on M
+    //first finding the max vertex at block level and storing into Mtemp
+    Mtemp=M;
+    for (int i = 0; i<b; i++)
+    {
+    	for (int j = 0; j<b; j++)
+    	{
+			if(Mtemp[i * b]<=Mtemp[i * b + j]){//storing the block level rowwise max vertex at the start of the row
+				Mtemp[i * b] = Mtemp[i * b + j];
+			}
+    	}
+    }
+  
     //creating communicators for the performing ALLREDUCE row-wise
     MPI_Comm row_comm;
     // int color = rank%q;
@@ -98,19 +114,70 @@ int connected_components(std::vector<signed char>& A, int n, int q, const char* 
     MPI_Comm_size(row_comm, &row_size);
     // printf("WORLD RANK/SIZE: %d/%d \t ROW RANK/SIZE: %d/%d\n",rank, size, row_rank, row_size);
     for (int j = 0; j<b; j++)
-    	{	
-    		max = M[j*b];
-    		// printf("max %d", max);
-    		MPI_Allreduce(&max, &Q[j*b], 1, MPI_INT, MPI_MAX, row_comm);//stroing resultant value in matrix Q
+	{	
+		max = Mtemp[j*b];
+		// printf("max %d", max);
+		MPI_Allreduce(&max, &Q[j*b], 1, MPI_INT, MPI_MAX, row_comm);//storing resultant value in matrix Q
+	}
+	for (int i = 0; i<b; i++)//replicating Q along row-wise
+    {
+    	for (int j = 0; j<b; j++)
+    	{
+    		Q[i * b + j] = Q[i*b];
     	}
+    }
     MPI_Comm_free(&row_comm);
+    for (int i = 0; i<b; i++)
+    {
+    	for (int j = 0; j<b; j++)
+    	{
+    		if (Q[i * b + j] == j+col*b){//adding col*b, for adjusting the actual column number
+    			M[i * b + j] = P[i * b + j];//assigning the respective max vertex
+     		}
+    	}
+    }
+    //now applying global allreduce row-wise again on M
+    //first finding the max vertex at block level
+    Mtemp=M;
+    for (int i = 0; i<b; i++)
+    {
+    	for (int j = 0; j<b; j++)
+    	{
+    		if(Mtemp[i * b]<=Mtemp[i * b + j]){//storing the block level rowwise max vertex at the start of the row
+				Mtemp[i * b] = Mtemp[i * b + j];
+			}
+    	}
+    }
+     //creating communicators for the performing ALLREDUCE row-wise on helper Matrix Mtemp
+    // int color = rank%q;
+    MPI_Comm_split(comm, (rank/q), rank, &row_comm);
+    MPI_Comm_rank(row_comm, &row_rank);
+    MPI_Comm_size(row_comm, &row_size);
+    // printf("WORLD RANK/SIZE: %d/%d \t ROW RANK/SIZE: %d/%d\n",rank, size, row_rank, row_size);
+    for (int j = 0; j<b; j++)
+	{	
+		max = Mtemp[j*b];
+		// printf("max %d", max);
+		MPI_Allreduce(&max, &PPrime[j*b], 1, MPI_INT, MPI_MAX, row_comm);//storing resultant value in matrix Q
+	}
+	for (int i = 0; i<b; i++)//replicating PPrime along row-wise
+    {
+    	for (int j = 0; j<b; j++)
+    	{
+    		PPrime[i * b + j] = PPrime[i*b];
+    	}
+    }
+    MPI_Comm_free(&row_comm);
+
     //Printing the Parent Matrix
+    sleep(rank);
+    // printf("Col %d",col*b);
     std::cout << "Parent Matrix P (" << row << "," << col << ")" << std::endl;
     for (int i = 0; i < b; ++i) {
-        for (int j = 0; j < b; ++j) std::cout << static_cast<int>(Q[i * b + j]) << " ";
+        for (int j = 0; j < b; ++j) std::cout << static_cast<int>(PPrime[i * b + j]) << " ";
         std::cout << std::endl;
     }
-    return -1;
+    return PPrime[0];
 } // connected_components
 
 #endif // A1_HPP
